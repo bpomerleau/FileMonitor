@@ -8,22 +8,63 @@
 #include<sys/time.h>
 #include<signal.h>
 #include<string.h>
+#include<time.h>
 
+void timer_handler(int signal){
+	system("date");
+}
+
+void sigusr_handler(int signal){
+	printf("User interrupt!!\n");
+}
+
+void init(int period) {
+
+	//itimer sigaction init	
+	sigset_t timer_mask;
+	if (sigemptyset(&timer_mask) == -1) 
+		printf("Error on sigemptyset, errno: %s\n", strerror(errno));
+	if (sigaddset(&timer_mask, SIGUSR1) == -1) 
+		printf("Error on sigaddset(SIGUSR1), errno: %s\n", strerror(errno));
+	if (sigaddset(&timer_mask, SIGINT) == -1) 
+		printf("Error on sigaddset(SIGINT), errno: %s\n", strerror(errno));
+		
+	struct sigaction reg_report = { .sa_handler = timer_handler, .sa_mask = timer_mask }; 
+	
+	if (sigaction(SIGALRM, &reg_report, NULL) == -1) 
+		printf("Error on sigaction, errno: %s\n", strerror(errno));
+
+	//SIGUSR1 sigaction init	
+	sigset_t SIGUSR_mask;
+	if (sigemptyset(&SIGUSR_mask) == -1) 
+		printf("Error on sigemptyset, errno: %s\n", strerror(errno));
+	if (sigaddset(&SIGUSR_mask, SIGALRM) == -1) 
+		printf("Error on sigaddset(SIGALRM), errno: %s\n", strerror(errno));
+	if (sigaddset(&SIGUSR_mask, SIGINT) == -1) 
+		printf("Error on sigaddset(SIGINT), errno: %s\n", strerror(errno));	
+	
+	struct sigaction sigusr = { .sa_handler = sigusr_handler, .sa_mask = SIGUSR_mask }; 
+	
+	if (sigaction(SIGUSR1, &sigusr, NULL) == -1) 
+		printf("Error on sigaction, errno: %s\n", strerror(errno));
+	
+		
+	//itimter init
+	struct timeval interval = { .tv_sec = period };
+	const struct itimerval timer = { .it_interval = interval, .it_value = interval};
+
+	if (setitimer(ITIMER_REAL, &timer, NULL) == -1) 
+		printf("Error on setitimer. errno: %s\n", strerror(errno));
+	
+}
 
 int main(int argc, char *argv[]){
 
-	int period;
-	char *path;
 	DIR *dirStream;
 	struct dirent *next;
-
-	void timer_handler(int signal){
-		printf("Timer expired. Resetting...\n");
-	}
-
-	void sigusr_handler(int signal){
-		printf("User interrupt!!\n");
-	}
+	int period;
+	char *path;
+	char type;
 	
 	if (argc == 3){
 		period = atoi(argv[1]);
@@ -35,54 +76,29 @@ int main(int argc, char *argv[]){
 		printf("Too few arguements\n");
 		return 0;
 	}
-	
 
+	init(period);	
 	
-	//itimer sigaction init	
-	sigset_t timer_mask;
-	if (sigemptyset(&timer_mask) == -1) printf("Error on sigemptyset, errno: %s\n", strerror(errno));
-	if (sigaddset(&timer_mask, SIGUSR1) == -1) printf("Error on sigaddset(SIGUSR1), errno: %s\n", strerror(errno));
-	if (sigaddset(&timer_mask, SIGINT) == -1) printf("Error on sigaddset(SIGINT), errno: %s\n", strerror(errno));
-		
-	struct sigaction reg_report = { .sa_handler = timer_handler, .sa_mask = timer_mask }; 
-	
-	if (sigaction(SIGALRM, &reg_report, NULL) == -1) printf("Error on sigaction, errno: %s\n", strerror(errno));
-
-	//SIGUSR1 sigaction init	
-	sigset_t SIGUSR_mask;
-	if (sigemptyset(&SIGUSR_mask) == -1) printf("Error on sigemptyset, errno: %s\n", strerror(errno));
-	if (sigaddset(&SIGUSR_mask, SIGALRM) == -1) printf("Error on sigaddset(SIGALRM), errno: %s\n", strerror(errno));
-	if (sigaddset(&SIGUSR_mask, SIGINT) == -1) printf("Error on sigaddset(SIGINT), errno: %s\n", strerror(errno));	
-	
-	struct sigaction sigusr = { .sa_handler = sigusr_handler, .sa_mask = SIGUSR_mask }; 
-	
-	if (sigaction(SIGUSR1, &sigusr, NULL) == -1) printf("Error on sigaction, errno: %s\n", strerror(errno));
-	
-		
-	//itimter init
-	struct timeval interval = { .tv_sec = period };
-	const struct itimerval timer = { .it_interval = interval, .it_value = interval};
-
-	if (setitimer(ITIMER_REAL, &timer, NULL) == -1) printf("Error on setitimer. errno: %s\n", strerror(errno));
-	
-		
-	
-	printf("period = %i\npath = %s\n",period, path);
 	dirStream = opendir(path);
 	if (dirStream < 0){
 		printf("%s not a valid directory\n", path);
 		return 0;
 	}
 
+	//first time print of everything in directory
+	system("date");
 	next = readdir(dirStream);
-	
-	char type;
-	//TODO --- the printing format of this while loop needs to be 
-	//  		brought into assignment spec
 	while (next != NULL) {		
-		if ((*next).d_type == DT_DIR) type = 'd';
-		else type = 'f';
-		printf("%c - %s\n", type, (*next).d_name);
+		if (next->d_type == DT_DIR) 
+			type = 'd';
+		else if (next->d_type == DT_REG)
+			type = '+';
+		else
+			type = 'o';
+
+		if ((strcmp(next->d_name,".") != 0) && (strcmp(next->d_name,"..") != 0)) {
+			printf("%c %s\n", type, (*next).d_name);	
+		}
 		next = readdir(dirStream);
 	}
 	
