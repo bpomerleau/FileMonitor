@@ -9,3 +9,5 @@ Brady Pomerleau: I wrote every line of code of this program. Brady Thompson was 
 					stopped responding to emails until 9 am Feb 02. 10 am he uploaded an incomplete 
 					solution to GitHub (private repo, don't worry). By then my solution was already
 					better than his. So I finished mine, and here it is. 
+
+This code runs successfully on the VM distributed on eclass.
