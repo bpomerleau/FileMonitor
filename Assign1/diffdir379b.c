@@ -65,7 +65,7 @@ int main(int argc, char *argv[]){
 
    	 dirStream = opendir(path);
 
-   	 if (dirStream < 0){
+   	 if (dirStream == NULL){
    		 printf("%s not a valid directory\n", path);
    		 return -1;
    	 }
@@ -106,7 +106,7 @@ int main(int argc, char *argv[]){
     
     //init inotify
     
-    mask = IN_CREATE | IN_DELETE | IN_MODIFY;
+    mask = IN_CREATE | IN_DELETE | IN_MODIFY | IN_DELETE_SELF;
     fd = inotify_init1(IN_NONBLOCK);
     wd = inotify_add_watch(fd, path, mask);
    	int bytechec = 0;
@@ -143,6 +143,11 @@ int main(int argc, char *argv[]){
                 printf("* %s", (inotify_buffer)->name);
             }
 
+            if ((*inotify_buffer).mask & IN_IGNORED){
+                printf("Directory deleted, closing.");
+                return 0;
+            }
+
    	        //r += (sizeof(struct inotify_event)+(inotify_buffer)=>len);
        		printf("\n");    
         	}  	 
@@ -158,4 +163,5 @@ int main(int argc, char *argv[]){
 }
 
 //stackoverflow.com/questions/5211993/using-read-with-inotify
+//man7.org/tlpi/code/online/diff/inotify/demo_inotify.c.html
 
