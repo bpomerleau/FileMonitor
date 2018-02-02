@@ -25,7 +25,6 @@ int main(int argc, char *argv[]){
 	char type;
 
 	void sig_handler(int signal){
-		system("date");
 		printflag = 1;
 	}
 
@@ -114,6 +113,9 @@ int main(int argc, char *argv[]){
 	sigprocmask(SIG_BLOCK, &signal_mask, NULL);
 	if (printflag == 1) {
 		printflag = 0;
+		system("date");	
+		//read(fd, inotify_buffer, sizeof(struct inotify_event)*10); //FIONREAD ioctl() for # available bytes
+		//printf("%i --- %s", (*inotify_buffer).wd, (*inotify_buffer).name);	
 		
 	}
 	sigprocmask(SIG_UNBLOCK, &signal_mask, NULL);
