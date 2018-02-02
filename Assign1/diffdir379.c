@@ -5,10 +5,13 @@
 #include<unistd.h>
 #include<sys/types.h>
 #include<sys/inotify.h>
+#include<sys/ioctl.h>
 #include<sys/time.h>
 #include<signal.h>
 #include<string.h>
 #include<time.h>
+
+#define INOTIFY_ITERATOR ((struct inotify_event *)((unsigned char *)inotify_buffer + pointvar))
 
 int main(int argc, char *argv[]){
 	
@@ -25,7 +28,6 @@ int main(int argc, char *argv[]){
 	char type;
 
 	void sig_handler(int signal){
-		system("date");
 		printflag = 1;
 	}
 
@@ -106,15 +108,27 @@ int main(int argc, char *argv[]){
 	//init inotify
 	inotify_buffer = malloc(sizeof(struct inotify_event) * 10 );
 	
-	mask = IN_CREATE | IN_DELETE | IN_MODIFY;
+	mask = IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO;
 	fd = inotify_init();
 	wd = inotify_add_watch(fd, path, mask);
-
+	
+	int bytestoread = 0;
+	int pointvar = 0;
 	while (1) {	
 	sigprocmask(SIG_BLOCK, &signal_mask, NULL);
 	if (printflag == 1) {
 		printflag = 0;
-		
+		system("date");
+		ioctl(fd, FIONREAD, &bytestoread);
+
+		if (bytestoread > 0) {
+			read(fd, inotify_buffer, sizeof(struct inotify_event)*10); 
+			while (pointvar < bytestoread) {
+				printf("%i --- %s\n", INOTIFY_ITERATOR->mask, INOTIFY_ITERATOR->name);
+				pointvar += sizeof(struct inotify_event) + INOTIFY_ITERATOR->len;
+			}
+			pointvar = 0;
+		}
 	}
 	sigprocmask(SIG_UNBLOCK, &signal_mask, NULL);
  }
