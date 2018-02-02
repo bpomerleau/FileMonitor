@@ -1,5 +1,6 @@
 #include<stdio.h>
 #include<stdlib.h>
+#include<stdbool.h>
 #include<dirent.h>
 #include<errno.h>
 #include<unistd.h>
@@ -66,7 +67,7 @@ int main(int argc, char *argv[]){
 
 		dirStream = opendir(path);
 
-		if (dirStream < 0){
+		if (dirStream == NULL){
 			printf("%s not a valid directory\n", path);
 			return -1;
 		}
@@ -106,33 +107,93 @@ int main(int argc, char *argv[]){
 	if (first_print()==-1) return 0;	
 	
 	//init inotify
-	inotify_buffer = malloc(sizeof(struct inotify_event) * 10 );
+	inotify_buffer = malloc(sizeof(struct inotify_event) * 100 );
 	
-	mask = IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO;
+	mask = IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF;
 	fd = inotify_init();
 	wd = inotify_add_watch(fd, path, mask);
 	
+	//main eternal loop
 	int bytestoread = 0;
 	int pointvar = 0;
+	// name_array is used to check whether file was created in this report period
+	// if it was, then don't print other types of reports
+	char name_array[100][16];
+	int array_len = 0;
 	while (1) {	
-	sigprocmask(SIG_BLOCK, &signal_mask, NULL);
-	if (printflag == 1) {
-		printflag = 0;
-		system("date");
-		ioctl(fd, FIONREAD, &bytestoread);
+		sigprocmask(SIG_BLOCK, &signal_mask, NULL);
+		if (printflag == 1) {
+			printflag = 0;
+			system("date");
+			ioctl(fd, FIONREAD, &bytestoread);
 
-		if (bytestoread > 0) {
-			read(fd, inotify_buffer, sizeof(struct inotify_event)*10); 
-			while (pointvar < bytestoread) {
-				printf("%i --- %s\n", INOTIFY_ITERATOR->mask, INOTIFY_ITERATOR->name);
-				pointvar += sizeof(struct inotify_event) + INOTIFY_ITERATOR->len;
+			if (bytestoread > 0) {
+				read(fd, inotify_buffer, sizeof(struct inotify_event)*100); 
+
+				while (pointvar < bytestoread) {
+					if (INOTIFY_ITERATOR->mask & (IN_CREATE | IN_MOVED_TO)) {
+						strcpy(name_array[array_len], INOTIFY_ITERATOR->name);
+						array_len++;	
+				
+						// use readdir to get file type and check whether file is still in directory
+						dirStream = opendir(path);
+
+						if (dirStream == NULL){
+							printf("%s not a valid directory\n", path);
+							return -1;
+						}
+						next = readdir(dirStream);
+						while (next != NULL) {
+							if (strcmp(next->d_name, INOTIFY_ITERATOR->name) == 0) { 	
+								if (next->d_type == DT_DIR) 
+									printf("d %s\n", INOTIFY_ITERATOR->name);
+								else if (next->d_type == DT_REG)
+									printf("+ %s\n", INOTIFY_ITERATOR->name);
+								else
+									printf("o %s\n", INOTIFY_ITERATOR->name);
+								break;
+								// if file not in directory, then it was deleted since its creation
+								// and should not be reported.
+							}
+							next = readdir(dirStream);
+						}
+	
+						closedir(dirStream);
+					
+					} else if (INOTIFY_ITERATOR->mask & IN_MODIFY) {
+						bool print = true;
+						for (int i = 0; i < array_len; i++) {
+							if (strcmp(INOTIFY_ITERATOR->name, name_array[i]) == 0) {
+								print = false;
+							}
+						}
+						if (print) {
+							printf("* %s\n", INOTIFY_ITERATOR->name);
+						}
+					
+					} else if (INOTIFY_ITERATOR->mask & (IN_DELETE | IN_MOVED_FROM)) {
+						bool print = true;					
+						for (int i = 0; i < array_len; i++) {
+							if (strcmp(INOTIFY_ITERATOR->name, name_array[i]) == 0) {
+								print = false;
+							}
+						}						
+						if (print) {
+							printf("- %s\n", INOTIFY_ITERATOR->name);
+						}
+					} else if (INOTIFY_ITERATOR->mask & IN_DELETE_SELF){
+						return 0;
+					}
+					pointvar += sizeof(struct inotify_event) + INOTIFY_ITERATOR->len;
+				}
+				array_len = 0;
+				pointvar = 0;
 			}
-			pointvar = 0;
 		}
+		sigprocmask(SIG_UNBLOCK, &signal_mask, NULL);
 	}
-	sigprocmask(SIG_UNBLOCK, &signal_mask, NULL);
- }
 
 	free(inotify_buffer);
+	free(name_array);
 	return 0;
 }
